@@ -13,6 +13,8 @@ class Aircraft {
         this.assignedWaitingPoint = null;
         this.velocity = 2;
         this.destination = null;
+        this.direction = 0; // Facing direction in radians
+        this.taxiEndTime = null; // For taxiing timer
         this.emergency = null; // 'fire', 'engine-out', 'bird-hit', 'hydraulic-failure', 'electrical-failure'
         this.emergencyTime = null;
         this.hasWindshear = false;
@@ -33,9 +35,13 @@ class Aircraft {
             } else {
                 // When landing and within 200px of runway, align to x-axis approach
                 let angle = Math.atan2(dy, dx);
+                if (distance > 0) {
+                    this.direction = angle; // Update direction only when moving
+                }
                 if (this.status === 'landing' && distance <= 200) {
                     // Lock to x-axis movement (straight approach)
                     angle = dx >= 0 ? 0 : Math.PI; // 0 for moving right, PI for moving left
+                    this.direction = angle;
                 }
                 
                 // Calculate velocity based on aircraft status
@@ -47,11 +53,25 @@ class Aircraft {
                 } 
                 // Slow down on ground (taxiing, waiting on ground)
                 else if (!this.isInAir && (this.status === 'taxing' || this.status === 'ready-for-takeoff')) {
-                    velocity = this.velocity * 0.2; // 1/5 of normal speed
+                    velocity = this.velocity * 0.5; // Faster taxiing speed to cover runway
                 }
                 
                 this.x += Math.cos(angle) * velocity;
                 this.y += Math.sin(angle) * velocity;
+            }
+        }
+        
+        // Check taxi timer
+        if (this.status === 'taxing' && this.taxiEndTime && Date.now() > this.taxiEndTime) {
+            // Remove plane after taxiing for 5 seconds
+            const index = aircraft.indexOf(this);
+            if (index > -1) {
+                aircraft.splice(index, 1);
+                if (this === selectedAircraft) {
+                    selectedAircraft = null;
+                }
+                addLog(`${this.callsign} taxied to gate and departed`, 'success');
+                updateFlightsList();
             }
         }
     }
@@ -68,6 +88,13 @@ const runways = {
     '24': { x: 1891, y: 629 },
     '07': { x: 1946, y: 1144 },
     '25': { x: 1035, y: 1144 }
+};
+
+const approachPoints = {
+    '06': { x: runways['06'].x - 100, y: runways['06'].y },
+    '24': { x: runways['24'].x + 100, y: runways['24'].y },
+    '07': { x: runways['07'].x - 100, y: runways['07'].y },
+    '25': { x: runways['25'].x - 100, y: runways['25'].y }
 };
 
 const waitingPoints = {
@@ -88,6 +115,8 @@ let aircraft = [];
 let selectedAircraft = null;
 let hoveredAircraft = null;
 let zoomLevel = 1;
+let panX = 0;
+let panY = 0;
 let runwayInUse = {}; // Track when runways will be clear
 let emergencyAlertShown = {}; // Track if emergency has been shown
 let lastEmergencyTime = 0; // Track last emergency trigger
@@ -127,10 +156,31 @@ function initializeAircraft() {
         const model = models[Math.floor(Math.random() * models.length)];
         const newAircraft = new Aircraft(callsigns[i], type, model);
         
-        // Position aircraft randomly around the map area
-        // Use pixel coordinates relative to map.png
-        newAircraft.x = 800 + Math.random() * 400;
-        newAircraft.y = 400 + Math.random() * 400;
+        // Position aircraft
+        if (newAircraft.isInAir) {
+            // Approaching planes from edges/corners
+            const side = Math.floor(Math.random() * 4);
+            if (side === 0) { // Top
+                newAircraft.x = Math.random() * 2000;
+                newAircraft.y = 0;
+            } else if (side === 1) { // Right
+                newAircraft.x = 2000;
+                newAircraft.y = Math.random() * 1500;
+            } else if (side === 2) { // Bottom
+                newAircraft.x = Math.random() * 2000;
+                newAircraft.y = 1500;
+            } else { // Left
+                newAircraft.x = 0;
+                newAircraft.y = Math.random() * 1500;
+            }
+        } else {
+            // On ground planes at waiting points
+            const waitingKeys = Object.keys(waitingPoints);
+            const randomPoint = waitingKeys[Math.floor(Math.random() * waitingKeys.length)];
+            newAircraft.x = waitingPoints[randomPoint].x;
+            newAircraft.y = waitingPoints[randomPoint].y;
+            newAircraft.status = 'ready-for-takeoff'; // Or on-ground
+        }
         
         aircraft.push(newAircraft);
     }
@@ -143,24 +193,49 @@ function resizeCanvas() {
 }
 
 // Canvas interactions - ONLY for visualization, no selection from map
+let isDragging = false;
+let lastMouseX, lastMouseY;
+
+mapCanvas.addEventListener('mousedown', (e) => {
+    isDragging = true;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+});
+
 mapCanvas.addEventListener('mousemove', (e) => {
-    // Just update hover for visual effect, but don't select on click
     const rect = mapCanvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    hoveredAircraft = null;
-    
-    for (let plane of aircraft) {
-        const screenX = plane.x * (mapCanvas.width / mapImage.width) * zoomLevel;
-        const screenY = plane.y * (mapCanvas.height / mapImage.height) * zoomLevel;
-        const distance = Math.sqrt(Math.pow(mouseX - screenX, 2) + Math.pow(mouseY - screenY, 2));
+    if (isDragging) {
+        const dx = e.clientX - lastMouseX;
+        const dy = e.clientY - lastMouseY;
+        panX += dx;
+        panY += dy;
+        // Clamp pan to prevent showing outside map
+        panX = Math.max(-mapCanvas.width, Math.min(0, panX));
+        panY = Math.max(-mapCanvas.height, Math.min(0, panY));
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+        drawMap();
+    } else {
+        hoveredAircraft = null;
         
-        if (distance < 12) {
-            hoveredAircraft = plane;
-            break;
+        for (let plane of aircraft) {
+            const screenX = plane.x * (mapCanvas.width / mapImage.width) * zoomLevel + panX;
+            const screenY = plane.y * (mapCanvas.height / mapImage.height) * zoomLevel + panY;
+            const distance = Math.sqrt(Math.pow(mouseX - screenX, 2) + Math.pow(mouseY - screenY, 2));
+            
+            if (distance < 12) {
+                hoveredAircraft = plane;
+                break;
+            }
         }
     }
+});
+
+mapCanvas.addEventListener('mouseup', () => {
+    isDragging = false;
 });
 
 // Drawing
@@ -170,7 +245,7 @@ function drawMap() {
 
     // Draw background (map image or dark background)
     if (mapImage && mapImage.complete) {
-        mapCtx.drawImage(mapImage, 0, 0, width, height);
+        mapCtx.drawImage(mapImage, panX, panY, width * zoomLevel, height * zoomLevel);
     } else {
         mapCtx.fillStyle = '#0a0a0a';
         mapCtx.fillRect(0, 0, width, height);
@@ -187,8 +262,8 @@ function drawMap() {
     mapCtx.strokeStyle = '#FFD700';
     mapCtx.lineWidth = 3;
     Object.entries(runways).forEach(([name, runway]) => {
-        const x = runway.x * scaleX * zoomLevel;
-        const y = runway.y * scaleY * zoomLevel;
+        const x = runway.x * scaleX * zoomLevel + panX;
+        const y = runway.y * scaleY * zoomLevel + panY;
         mapCtx.beginPath();
         mapCtx.arc(x, y, 8, 0, Math.PI * 2);
         mapCtx.stroke();
@@ -202,10 +277,10 @@ function drawMap() {
     // Waiting points
     mapCtx.fillStyle = '#00FF00';
     Object.entries(waitingPoints).forEach(([name, point]) => {
-        const x = point.x * scaleX * zoomLevel;
-        const y = point.y * scaleY * zoomLevel;
+        const x = point.x * scaleX * zoomLevel + panX;
+        const y = point.y * scaleY * zoomLevel + panY;
         mapCtx.beginPath();
-        mapCtx.arc(x, y, 6, 0, Math.PI * 2);
+        mapCtx.arc(x, y, 3, 0, Math.PI * 2);
         mapCtx.fill();
         
         // Label waiting point
@@ -216,8 +291,11 @@ function drawMap() {
 
     // Aircraft
     aircraft.forEach(plane => {
-        const x = plane.x * scaleX * zoomLevel;
-        const y = plane.y * scaleY * zoomLevel;
+        const x = plane.x * scaleX * zoomLevel + panX;
+        const y = plane.y * scaleY * zoomLevel + panY;
+        
+        // Skip drawing if outside visible area to prevent glitches
+        if (x < -50 || x > width + 50 || y < -50 || y > height + 50) return;
         
         // Selection highlight (yellow)
         if (plane === selectedAircraft) {
@@ -254,6 +332,9 @@ function drawMap() {
             // Draw image
             mapCtx.save();
             mapCtx.translate(x, y);
+            let rot = plane.direction;
+            if (plane.type === 'regular') rot += Math.PI / 2; // Adjust for image orientation
+            mapCtx.rotate(rot);
             mapCtx.drawImage(img, -imageSize / 2, -imageSize / 2, imageSize, imageSize);
             mapCtx.restore();
         } else {
@@ -277,7 +358,6 @@ function drawMap() {
         if (plane.emergency) {
             mapCtx.fillStyle = '#FF0000';
             mapCtx.font = 'bold 14px Arial';
-            mapCtx.fillText('🚨', x - 12, y - 16);
         }
     });
 }
@@ -355,7 +435,8 @@ function updateFlightsList() {
 function updateAircraftDetails() {
     const detailsPanel = document.getElementById('selectedAircraftInfo');
     
-    if (!selectedAircraft) {
+    if (!selectedAircraft || !aircraft.includes(selectedAircraft)) {
+        selectedAircraft = null;
         detailsPanel.innerHTML = '<p class="placeholder">Select a flight from the list</p>';
         document.querySelectorAll('.command-group').forEach(g => g.style.display = 'none');
         return;
@@ -398,8 +479,9 @@ function updateAircraftDetails() {
 }
 
 function handleCommand(command, value) {
-    if (!selectedAircraft) {
+    if (!selectedAircraft || !aircraft.includes(selectedAircraft)) {
         addLog('No aircraft selected', 'error');
+        selectedAircraft = null;
         return;
     }
 
@@ -412,10 +494,9 @@ function handleCommand(command, value) {
                 return;
             }
             
-            const runway = runways[value];
-            selectedAircraft.destination = runway;
-            selectedAircraft.status = 'landing';
-            selectedAircraft.isInAir = false;
+            selectedAircraft.destination = approachPoints[value];
+            selectedAircraft.status = 'approaching';
+            selectedAircraft.isInAir = true; // Still in air during approach
             selectedAircraft.assignedRunway = value;
             
             // Block runway for 3 minutes if heavy aircraft
@@ -589,16 +670,27 @@ function handleAircraftLanding(plane) {
     }
     
     // Successful landing
-    plane.status = 'landed';
+    plane.status = 'taxing';
     plane.isInAir = false;
+    plane.taxiEndTime = Date.now() + 5000; // Disappear after 5 seconds of taxiing
+    
+    // Set taxi destination to opposite runway
+    const oppositeRunways = {
+        '06': '24',
+        '24': '06',
+        '07': '25',
+        '25': '07'
+    };
+    const opposite = oppositeRunways[plane.assignedRunway];
+    plane.destination = runways[opposite];
     
     // Clear emergency if it was resolved
     if (plane.emergency) {
-        addLog(`${plane.callsign} successfully landed despite ${plane.emergency} - emergency resolved`, 'success');
+        addLog(`${plane.callsign} successfully landed despite ${plane.emergency} - emergency resolved, taxiing to gate`, 'success');
         activeEmergencyCount = Math.max(0, activeEmergencyCount - 1);
         plane.emergency = null;
     } else {
-        addLog(`${plane.callsign} successfully landed on runway ${plane.assignedRunway}`, 'success');
+        addLog(`${plane.callsign} successfully landed on runway ${plane.assignedRunway}, taxiing to gate`, 'success');
     }
     
     plane.assignedRunway = null;
@@ -616,7 +708,12 @@ function checkAircraftAtDestination() {
             if (distance < 5) {
                 plane.destination = null;
                 
-                if (plane.status === 'landing') {
+                if (plane.status === 'approaching') {
+                    plane.status = 'landing';
+                    plane.destination = runways[plane.assignedRunway];
+                    plane.isInAir = false;
+                    addLog(`${plane.callsign} starting final approach to runway ${plane.assignedRunway}`, 'info');
+                } else if (plane.status === 'landing') {
                     handleAircraftLanding(plane);
                 } else if (plane.status === 'taking-off') {
                     plane.status = 'airborne';
@@ -625,6 +722,7 @@ function checkAircraftAtDestination() {
                     plane.assignedRunway = null;
                     updateFlightsList();
                 } else if (plane.status === 'taxing') {
+                    // Taxiing to waiting point
                     plane.status = 'ready-for-takeoff';
                     addLog(`${plane.callsign} reached waiting point ${plane.assignedWaitingPoint}`, 'success');
                     updateFlightsList();
