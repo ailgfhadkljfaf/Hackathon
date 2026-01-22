@@ -164,6 +164,53 @@ body {
     background: #440000;
     border-radius: 3px;
     font-size: 11px;
+    margin-right: 5px;
+}
+
+.flight-location {
+    display: block;
+    padding: 2px 0;
+    color: #00ffff;
+    font-size: 11px;
+    margin-top: 3px;
+    font-weight: bold;
+}
+
+.emergency-badge {
+    display: inline-block;
+    padding: 3px 6px;
+    background: #ff0000;
+    color: #fff;
+    border-radius: 3px;
+    font-size: 10px;
+    margin-top: 5px;
+    font-weight: bold;
+    animation: blink 0.7s infinite;
+}
+
+.emergency-badge.fire {
+    background: #ff4400;
+}
+
+.emergency-badge.engine-out {
+    background: #ff0000;
+}
+
+.emergency-badge.bird-hit {
+    background: #ff8800;
+}
+
+.emergency-badge.hydraulic-failure {
+    background: #ff0088;
+}
+
+.emergency-badge.electrical-failure {
+    background: #0088ff;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.5; }
 }
 
 /* Details Section (Bottom Left) */
@@ -213,6 +260,21 @@ body {
     display: block;
     padding-left: 10px;
     margin-top: 2px;
+}
+
+.aircraft-detail.emergency-alert {
+    background: #ff0000;
+    color: #fff;
+    padding: 8px;
+    border-radius: 4px;
+    margin: 10px 0;
+    border-left: 4px solid #ff00ff;
+    animation: pulse-red 1s infinite;
+}
+
+@keyframes pulse-red {
+    0%, 100% { background: #ff0000; }
+    50% { background: #ff4444; }
 }
 
 .commands-section {
