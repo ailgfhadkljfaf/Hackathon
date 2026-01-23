@@ -74,7 +74,7 @@
 Click on any flight in the Active Flights list to select and control it.
 
 ### Command Buttons
-Select an aircraft, then click any available command button to issue instructions.
+Select an aircraft in the flght list, then click any available command button to issue instructions.
 
 ## Technical Details
 

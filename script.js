@@ -755,6 +755,120 @@ document.querySelectorAll('.cmd-btn').forEach(btn => {
     });
 });
 
+// --- Auth (localStorage) logic ---
+let currentUser = null;
+
+function getUsers() {
+    try { return JSON.parse(localStorage.getItem('atc_users') || '{}'); } catch(e) { return {}; }
+}
+
+function saveUsers(users) {
+    localStorage.setItem('atc_users', JSON.stringify(users));
+}
+
+function getPending() {
+    try { return JSON.parse(localStorage.getItem('atc_pending') || '{}'); } catch(e) { return {}; }
+}
+
+function savePending(pending) {
+    localStorage.setItem('atc_pending', JSON.stringify(pending));
+}
+
+function showModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+// Login/signup button handlers
+document.getElementById('loginBtn').addEventListener('click', () => showModal('loginModal'));
+document.getElementById('signupBtn').addEventListener('click', () => showModal('signupModal'));
+document.getElementById('loginCancel').addEventListener('click', () => closeModal('loginModal'));
+document.getElementById('signupCancel').addEventListener('click', () => closeModal('signupModal'));
+
+document.getElementById('verifyCancel').addEventListener('click', () => closeModal('verifyModal'));
+
+// Login form
+document.getElementById('loginForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const u = document.getElementById('loginUsername').value.trim();
+    const p = document.getElementById('loginPassword').value;
+    const users = getUsers();
+    const msg = document.getElementById('loginMessage');
+    if (!u || !p) { msg.innerText = 'Enter username and password'; return; }
+    if (users[u] && users[u].password === p) {
+        currentUser = u;
+        msg.innerText = 'Login successful';
+        closeModal('loginModal');
+        updateAuthUI();
+    } else {
+        msg.innerText = 'Invalid username or password';
+    }
+});
+
+// Signup flow: register -> send verification code (simulated) -> verify
+document.getElementById('signupForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const u = document.getElementById('signupUsername').value.trim();
+    const p = document.getElementById('signupPassword').value;
+    const email = document.getElementById('signupEmail').value.trim();
+    const msg = document.getElementById('signupMessage');
+    if (!u || !p || !email) { msg.innerText = 'Fill all fields'; return; }
+    const users = getUsers();
+    if (users[u]) { msg.innerText = 'Username already exists'; return; }
+    // create pending with verification code
+    const pending = getPending();
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    pending[u] = { username: u, password: p, email: email, code: code };
+    savePending(pending);
+    closeModal('signupModal');
+    // Show verify modal and simulate sending email (display code in info for simulation)
+    document.getElementById('verifyInfo').innerText = `A verification code was sent to ${email} (simulated). Code: ${code}`;
+    showModal('verifyModal');
+});
+
+// Verify form
+document.getElementById('verifyForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('verifyCode').value.trim();
+    const msg = document.getElementById('verifyMessage');
+    const pending = getPending();
+    // find pending user with this code
+    const entries = Object.entries(pending);
+    const match = entries.find(([k,v]) => v.code === input);
+    if (!match) { msg.innerText = 'Invalid code'; return; }
+    const [username, data] = match;
+    const users = getUsers();
+    users[username] = { password: data.password, email: data.email };
+    saveUsers(users);
+    // remove pending
+    delete pending[username];
+    savePending(pending);
+    msg.innerText = 'Account verified and created';
+    setTimeout(() => { closeModal('verifyModal'); updateAuthUI(); }, 800);
+});
+
+function updateAuthUI() {
+    const loginEl = document.getElementById('loginBtn');
+    const signupEl = document.getElementById('signupBtn');
+    // remove previous logout if present
+    const existing = document.getElementById('logoutBtn');
+    if (existing) existing.remove();
+    if (currentUser) {
+        loginEl.style.display = 'none';
+        signupEl.style.display = 'none';
+        const logout = document.createElement('button');
+        logout.id = 'logoutBtn';
+        logout.className = 'topbar-btn';
+        logout.innerText = `Logout (${currentUser})`;
+        logout.addEventListener('click', () => { currentUser = null; logout.remove(); loginEl.style.display = ''; signupEl.style.display = ''; });
+        document.querySelector('.topbar-right').appendChild(logout);
+    } else {
+        loginEl.style.display = '';
+        signupEl.style.display = '';
+    }
+}
+
+// Initialize auth UI from local state
+updateAuthUI();
+
 // Main loop
 function animate() {
     aircraft.forEach(plane => plane.update());

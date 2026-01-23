@@ -5,8 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ATC Simulator</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="logo.png">
 </head>
 <body>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <div class="topbar-left"></div>
+            <div class="topbar-center">ATC simulator</div>
+            <div class="topbar-right">
+                <button id="loginBtn" class="topbar-btn">Login</button>
+                <button id="signupBtn" class="topbar-btn">Sign Up</button>
+                <img id="siteLogo" src="logo.png" alt="Logo" class="topbar-logo" />
+            </div>
+        </div>
+    </header>
     <div class="container">
         <!-- Top Left: Map Overview -->
         <div class="map-section">
@@ -100,7 +112,55 @@
             <div id="activityLog"></div>
         </div>
     </div>
+    <div id="loginModal" class="modal">
+        <div class="modal-content">
+            <h3>Login</h3>
+            <form id="loginForm">
+                <input type="text" id="loginUsername" placeholder="Username" required />
+                <input type="password" id="loginPassword" placeholder="Password" required />
+                <div class="modal-actions">
+                    <button type="submit" class="modal-btn">Login</button>
+                    <button type="button" class="modal-btn" id="loginCancel">Cancel</button>
+                </div>
+                <div id="loginMessage" class="modal-msg"></div>
+            </form>
+        </div>
+    </div>
 
+    <!-- Signup Modal -->
+    <div id="signupModal" class="modal">
+        <div class="modal-content">
+            <h3>Sign Up</h3>
+            <form id="signupForm">
+                <input type="text" id="signupUsername" placeholder="Username" required />
+                <input type="password" id="signupPassword" placeholder="Password" required />
+                <input type="email" id="signupEmail" placeholder="Email" required />
+                <div class="modal-actions">
+                    <button type="submit" class="modal-btn">Register</button>
+                    <button type="button" class="modal-btn" id="signupCancel">Cancel</button>
+                </div>
+                <div id="signupMessage" class="modal-msg"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Verification Modal -->
+    <div id="verifyModal" class="modal">
+        <div class="modal-content">
+            <h3>Verify Email</h3>
+            <p id="verifyInfo">A verification code has been sent to your email (simulated).</p>
+            <form id="verifyForm">
+                <input type="text" id="verifyCode" placeholder="Verification Code" required />
+                <div class="modal-actions">
+                    <button type="submit" class="modal-btn">Verify</button>
+                    <button type="button" class="modal-btn" id="verifyCancel">Cancel</button>
+                </div>
+                <div id="verifyMessage" class="modal-msg"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Pause Overlay removed -->
     <script src="script.js"></script>
 </body>
 </html>
